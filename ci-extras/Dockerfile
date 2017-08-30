@@ -1,4 +1,5 @@
-FROM julia-0.6-minimal
+ARG JULIA_TAG
+FROM julia:$JULIA_TAG
 
 MAINTAINER Invenia Technical Computing
 

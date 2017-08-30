@@ -2,12 +2,13 @@ FROM ubuntu:16.04
 
 MAINTAINER Invenia Technical Computing
 
-ENV JULIA_VERSION 0.6
-ENV JULIA_BIN_HOST "https://julialang-s3.julialang.org"
-ENV JULIA_URL "$JULIA_BIN_HOST/bin/linux/x64/$JULIA_VERSION/julia-${JULIA_VERSION}-latest-linux-x86_64.tar.gz"
+ENV JULIA_VERSION latest
+
+ENV JULIA_BIN_HOST "https://julialangnightlies-s3.julialang.org"
+ENV JULIA_URL "$JULIA_BIN_HOST/bin/linux/x64/julia-latest-linux-x86_64.tar.gz"
 ENV JULIA_ROOT /usr/local
 
-LABEL julia_version=$JULIA_VERSION
+LABEL julia_version=latest
 LABEL julia_install=minimal
 
 RUN apt-get update && \
