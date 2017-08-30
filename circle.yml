@@ -1,0 +1,118 @@
+version: 2
+
+base: &BASE
+  docker:
+    - image: docker:17.06.2-ce-git
+
+release_minimal: &RELEASE_MINIMAL
+  <<: *BASE
+  steps:
+    - checkout
+    - setup_remote_docker:
+        version: 17.06.1-ce
+    - run:
+        name: Build docker image
+        command: |
+          docker build -t $IMAGE_NAME:$JULIA_VERSION$JULIA_PATCH --build-arg JULIA_VERSION=$JULIA_VERSION --build-arg JULIA_PATCH=$JULIA_PATCH $DOCKERFILE_PATH
+          docker tag $IMAGE_NAME:$JULIA_VERSION$JULIA_PATCH $IMAGE_NAME:$JULIA_VERSION
+    - run:
+        name: Push docker image
+        command: |
+          docker login -u $DOCKER_USER -p $DOCKER_PASS
+          docker push $IMAGE_NAME:$JULIA_VERSION$JULIA_PATCH
+          docker push $IMAGE_NAME:$JULIA_VERSION
+
+nightly_minimal: &NIGHTLY_MINIMAL
+  <<: *BASE
+  steps:
+    - checkout
+    - setup_remote_docker:
+        version: 17.06.1-ce
+    - run:
+        name: Build docker image
+        command: |
+          docker build -t $IMAGE_NAME:latest $DOCKERFILE_PATH
+    - run:
+        name: Push docker image
+        command: |
+          docker login -u $DOCKER_USER -p $DOCKER_PASS
+          docker push $IMAGE_NAME:latest
+
+ci_extras: &CI_EXTRAS
+  <<: *BASE
+  steps:
+    - checkout
+    - setup_remote_docker:
+        version: 17.06.1-ce
+    - run:
+        name: Pull minimal docker image
+        command: |
+          docker pull $MINIMAL_IMAGE_NAME:$MINIMAL_TAG
+    - run:
+        name: Build docker image
+        command: |
+          docker build -t $IMAGE_NAME:$MINIMAL_TAG --build-arg JULIA_TAG=$MINIMAL_TAG $DOCKERFILE_PATH
+    - run:
+        name: Push docker image
+        command: |
+          docker login -u $DOCKER_USER -p $DOCKER_PASS
+          docker push $IMAGE_NAME:$MINIMAL_TAG
+
+jobs:
+  v0.5_minimal:
+    <<: *RELEASE_MINIMAL
+    environment:
+      JULIA_VERSION: 0.5
+      JULIA_PATCH: -latest
+      DOCKERFILE_PATH: minimal/tagged
+      IMAGE_NAME: invenia/julia
+  v0.6_minimal:
+    <<: *RELEASE_MINIMAL
+    environment:
+      JULIA_VERSION: 0.6
+      JULIA_PATCH: -latest
+      DOCKERFILE_PATH: minimal/tagged
+      IMAGE_NAME: invenia/julia
+  nightly_minimal:
+    <<: *NIGHTLY_MINIMAL
+    environment:
+      DOCKERFILE_PATH: minimal/nightly
+      IMAGE_NAME: invenia/julia
+  v0.5_ci_extras:
+    <<: *CI_EXTRAS
+    environment:
+      MINIMAL_TAG: 0.5-latest
+      DOCKERFILE_PATH: ci-extras
+      MINIMAL_IMAGE_NAME: invenia/julia
+      IMAGE_NAME: invenia/julia-ci-extras
+  v0.6_ci_extras:
+    <<: *CI_EXTRAS
+    environment:
+      MINIMAL_TAG: 0.6-latest
+      DOCKERFILE_PATH: ci-extras
+      MINIMAL_IMAGE_NAME: invenia/julia
+      IMAGE_NAME: invenia/julia-ci-extras
+  nightly_ci_extras:
+    <<: *CI_EXTRAS
+    environment:
+      MINIMAL_TAG: latest
+      DOCKERFILE_PATH: ci-extras
+      MINIMAL_IMAGE_NAME: invenia/julia
+      IMAGE_NAME: invenia/julia-ci-extras
+
+workflows:
+  version: 2
+  build_all:
+    jobs:
+      - v0.5_minimal
+      - v0.6_minimal
+      - nightly_minimal
+      - v0.5_ci_extras:
+          requires:
+            - v0.5_minimal
+      - v0.6_ci_extras:
+          requires:
+            - v0.6_minimal
+      - nightly_ci_extras:
+          requires:
+            - nightly_minimal

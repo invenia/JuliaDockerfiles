@@ -1,5 +1,5 @@
-ARG JULIA_TAG
-FROM julia:$JULIA_TAG
+ARG JULIA_TAG=latest
+FROM invenia/julia:$JULIA_TAG
 
 MAINTAINER Invenia Technical Computing
 

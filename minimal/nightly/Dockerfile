@@ -5,7 +5,7 @@ MAINTAINER Invenia Technical Computing
 ENV JULIA_VERSION latest
 
 ENV JULIA_BIN_HOST "https://julialangnightlies-s3.julialang.org"
-ENV JULIA_URL "$JULIA_BIN_HOST/bin/linux/x64/julia-latest-linux-x86_64.tar.gz"
+ENV JULIA_URL "$JULIA_BIN_HOST/bin/linux/x64/julia-latest-linux64.tar.gz"
 ENV JULIA_ROOT /usr/local
 
 LABEL julia_version=latest
