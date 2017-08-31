@@ -10,17 +10,21 @@ release_minimal: &RELEASE_MINIMAL
     - checkout
     - setup_remote_docker:
         version: 17.06.1-ce
+    - run: mkdir -p /tmp/images/minimal
     - run:
         name: Build docker image
         command: |
-          docker build -t $IMAGE_NAME:$JULIA_VERSION$JULIA_PATCH --build-arg JULIA_VERSION=$JULIA_VERSION --build-arg JULIA_PATCH=$JULIA_PATCH $DOCKERFILE_PATH
-          docker tag $IMAGE_NAME:$JULIA_VERSION$JULIA_PATCH $IMAGE_NAME:$JULIA_VERSION
+          docker build -t $IMAGE --build-arg JULIA_VERSION=$JULIA_VERSION --build-arg JULIA_PATCH=$JULIA_PATCH $DOCKERFILE_PATH
     - run:
-        name: Push docker image
+        name: Save docker image
         command: |
-          docker login -u $DOCKER_USER -p $DOCKER_PASS
-          docker push $IMAGE_NAME:$JULIA_VERSION$JULIA_PATCH
-          docker push $IMAGE_NAME:$JULIA_VERSION
+          docker save $IMAGE | gzip -c -1 > /tmp/images/$IMAGE_FILE
+    - persist_to_workspace:
+        root: /tmp/images
+        paths: minimal/*.tar.gz
+    - store_artifacts:
+        path: /tmp/images/minimal
+        destination: docker-images
 
 nightly_minimal: &NIGHTLY_MINIMAL
   <<: *BASE
@@ -28,15 +32,21 @@ nightly_minimal: &NIGHTLY_MINIMAL
     - checkout
     - setup_remote_docker:
         version: 17.06.1-ce
+    - run: mkdir -p /tmp/images/minimal
     - run:
         name: Build docker image
         command: |
-          docker build -t $IMAGE_NAME:latest $DOCKERFILE_PATH
+          docker build -t $IMAGE $DOCKERFILE_PATH
     - run:
-        name: Push docker image
+        name: Save docker image
         command: |
-          docker login -u $DOCKER_USER -p $DOCKER_PASS
-          docker push $IMAGE_NAME:latest
+          docker save $IMAGE | gzip -c -1 > /tmp/images/$IMAGE_FILE
+    - persist_to_workspace:
+        root: /tmp/images
+        paths: minimal/*.tar.gz
+    - store_artifacts:
+        path: /tmp/images/minimal
+        destination: docker-images
 
 ci_extras: &CI_EXTRAS
   <<: *BASE
@@ -44,19 +54,42 @@ ci_extras: &CI_EXTRAS
     - checkout
     - setup_remote_docker:
         version: 17.06.1-ce
+    - attach_workspace:
+        at: /tmp/images
+    - run: mkdir -p /tmp/images/ci-extras
     - run:
-        name: Pull minimal docker image
+        name: Load minimal docker image
         command: |
-          docker pull $MINIMAL_IMAGE_NAME:$MINIMAL_TAG
+          gunzip -c /tmp/images/$MINIMAL_IMAGE_FILE | docker load
     - run:
         name: Build docker image
         command: |
-          docker build -t $IMAGE_NAME:$MINIMAL_TAG --build-arg JULIA_TAG=$MINIMAL_TAG $DOCKERFILE_PATH
+          docker build -t $IMAGE --build-arg JULIA_TAG=$MINIMAL_TAG $DOCKERFILE_PATH
+    - run:
+        name: Save docker image
+        command: |
+          docker save $IMAGE | gzip -c -1 > /tmp/images/$IMAGE_FILE
+    - persist_to_workspace:
+        root: /tmp/images
+        paths: ci-extras/*.tar.gz
+    - store_artifacts:
+        path: /tmp/images/ci-extras
+        destination: docker-images
+
+push: &PUSH
+  <<: *BASE
+  steps:
+    - attach_workspace:
+        at: /tmp/images
+    - run:
+        name: Load docker image
+        command: |
+          gunzip -c /tmp/images/$IMAGE_FILE | docker load
     - run:
         name: Push docker image
         command: |
           docker login -u $DOCKER_USER -p $DOCKER_PASS
-          docker push $IMAGE_NAME:$MINIMAL_TAG
+          docker push $IMAGE
 
 jobs:
   v0.5_minimal:
@@ -65,40 +98,76 @@ jobs:
       JULIA_VERSION: 0.5
       JULIA_PATCH: -latest
       DOCKERFILE_PATH: minimal/tagged
-      IMAGE_NAME: invenia/julia
+      IMAGE: invenia/julia:0.5-latest
+      IMAGE_FILE: minimal/julia-minimal-0.5-latest-image.tar.gz
   v0.6_minimal:
     <<: *RELEASE_MINIMAL
     environment:
       JULIA_VERSION: 0.6
       JULIA_PATCH: -latest
       DOCKERFILE_PATH: minimal/tagged
-      IMAGE_NAME: invenia/julia
+      IMAGE: invenia/julia:0.6-latest
+      IMAGE_FILE: minimal/julia-minimal-0.6-latest-image.tar.gz
   nightly_minimal:
     <<: *NIGHTLY_MINIMAL
     environment:
       DOCKERFILE_PATH: minimal/nightly
-      IMAGE_NAME: invenia/julia
+      IMAGE: invenia/julia:latest
+      IMAGE_FILE: minimal/julia-minimal-latest-image.tar.gz
+  v0.5_minimal_push:
+    <<: *PUSH
+    environment:
+      IMAGE: invenia/julia:0.5-latest
+      IMAGE_FILE: minimal/julia-minimal-0.5-latest-image.tar.gz
+  v0.6_minimal_push:
+    <<: *PUSH
+    environment:
+      IMAGE: invenia/julia:0.6-latest
+      IMAGE_FILE: minimal/julia-minimal-0.6-latest-image.tar.gz
+  nightly_minimal_push:
+    <<: *PUSH
+    environment:
+      IMAGE: invenia/julia:latest
+      IMAGE_FILE: minimal/julia-minimal-latest-image.tar.gz
   v0.5_ci_extras:
     <<: *CI_EXTRAS
     environment:
-      MINIMAL_TAG: 0.5-latest
       DOCKERFILE_PATH: ci-extras
-      MINIMAL_IMAGE_NAME: invenia/julia
-      IMAGE_NAME: invenia/julia-ci-extras
+      MINIMAL_TAG: 0.5-latest
+      MINIMAL_IMAGE_FILE: minimal/julia-minimal-0.5-latest-image.tar.gz
+      IMAGE: invenia/julia-ci-extras:0.5-latest
+      IMAGE_FILE: ci-extras/julia-ci-extras-0.5-latest-image.tar.gz
   v0.6_ci_extras:
     <<: *CI_EXTRAS
     environment:
-      MINIMAL_TAG: 0.6-latest
       DOCKERFILE_PATH: ci-extras
-      MINIMAL_IMAGE_NAME: invenia/julia
-      IMAGE_NAME: invenia/julia-ci-extras
+      MINIMAL_TAG: 0.6-latest
+      MINIMAL_IMAGE_FILE: minimal/julia-minimal-0.6-latest-image.tar.gz
+      IMAGE: invenia/julia-ci-extras:0.6-latest
+      IMAGE_FILE: ci-extras/julia-ci-extras-0.6-latest-image.tar.gz
   nightly_ci_extras:
     <<: *CI_EXTRAS
     environment:
-      MINIMAL_TAG: latest
       DOCKERFILE_PATH: ci-extras
-      MINIMAL_IMAGE_NAME: invenia/julia
-      IMAGE_NAME: invenia/julia-ci-extras
+      MINIMAL_TAG: latest
+      MINIMAL_IMAGE_FILE: minimal/julia-minimal-latest-image.tar.gz
+      IMAGE: invenia/julia-ci-extras:latest
+      IMAGE_FILE: ci-extras/julia-ci-extras-latest-image.tar.gz
+  v0.5_ci_extras_push:
+    <<: *PUSH
+    environment:
+      IMAGE: invenia/julia-ci-extras:0.5-latest
+      IMAGE_FILE: ci-extras/julia-ci-extras-0.5-latest-image.tar.gz
+  v0.6_ci_extras_push:
+    <<: *PUSH
+    environment:
+      IMAGE: invenia/julia-ci-extras:0.6-latest
+      IMAGE_FILE: ci-extras/julia-ci-extras-0.6-latest-image.tar.gz
+  nightly_ci_extras_push:
+    <<: *PUSH
+    environment:
+      IMAGE: invenia/julia-ci-extras:latest
+      IMAGE_FILE: ci-extras/julia-ci-extras-latest-image.tar.gz
 
 workflows:
   version: 2
@@ -107,6 +176,24 @@ workflows:
       - v0.5_minimal
       - v0.6_minimal
       - nightly_minimal
+      - v0.5_minimal_push:
+          requires:
+            - v0.5_minimal
+          filters:
+            branches:
+              only: master
+      - v0.6_minimal_push:
+          requires:
+            - v0.6_minimal
+          filters:
+            branches:
+              only: master
+      - nightly_minimal_push:
+          requires:
+            - nightly_minimal
+          filters:
+            branches:
+              only: master
       - v0.5_ci_extras:
           requires:
             - v0.5_minimal
@@ -116,3 +203,21 @@ workflows:
       - nightly_ci_extras:
           requires:
             - nightly_minimal
+      - v0.5_ci_extras_push:
+          requires:
+            - v0.5_ci_extras
+          filters:
+            branches:
+              only: master
+      - v0.6_ci_extras_push:
+          requires:
+            - v0.6_ci_extras
+          filters:
+            branches:
+              only: master
+      - nightly_ci_extras_push:
+          requires:
+            - nightly_ci_extras
+          filters:
+            branches:
+              only: master
